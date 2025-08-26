@@ -5,6 +5,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
     <link rel="icon" href="https://i.ibb.co/M6KTWnf/pic.jpg" />
+    <!-- VK Bridge -->
+    <script src="https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js"></script>
+    <!-- Tone.js для звуков -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
     <style>
       @import url("https://fonts.googleapis.com/css?family=Press+Start+2P");
 
@@ -144,6 +148,65 @@
          height: 40px;
          filter: drop-shadow(2px 2px 0px #000);
       }
+      #timer-container {
+          position: absolute;
+          top: 70px;
+          left: 10px;
+          right: 10px;
+          height: 15px;
+          background-color: #333;
+          border-radius: 8px;
+          border: 2px solid #000;
+          z-index: 99;
+          padding: 2px;
+          box-shadow: 0 3px 0 #000;
+      }
+      #timer-bar {
+          width: 100%;
+          height: 100%;
+          background-color: #2ecc71;
+          border-radius: 4px;
+          transition: width 0.1s linear, background-color 0.5s linear;
+      }
+      .rules-illustration {
+          margin: 20px 0;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          flex-direction: column;
+      }
+      .rules-illustration canvas {
+          border: 2px solid #000;
+          border-radius: 10px;
+      }
+      .rules-illustration p {
+          font-size: 0.8rem;
+          margin-top: 10px;
+      }
+      #sound-btn {
+        position: absolute;
+        top: 20px;
+        left: 20px;
+        z-index: 100;
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 0;
+      }
+      #sound-btn svg {
+         width: 40px;
+         height: 40px;
+         filter: drop-shadow(2px 2px 0px #000);
+      }
+      #sound-btn .sound-off-icon {
+        display: none;
+      }
+      #sound-btn.muted .sound-off-icon {
+        display: block;
+      }
+      #sound-btn.muted .sound-on-icon {
+        display: none;
+      }
     </style>
   </head>
   <body>
@@ -152,12 +215,40 @@
         <div class="modal-content">
             <h1>Crossy Road</h1>
             <p>Рекорд: <span id="high-score">0</span></p>
-            <button id="play-btn" class="btn btn-primary">Играть</button>
+            <div class="modal-buttons">
+                <button id="play-btn" class="btn btn-primary">Играть</button>
+                <button id="rules-btn" class="btn btn-secondary">Правила</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rules Menu -->
+    <div id="rules-menu" class="modal">
+        <div class="modal-content">
+            <h2>Правила</h2>
+            <p>Время постоянно уходит! Двигайтесь вперед, чтобы получить немного времени.</p>
+            <div class="rules-illustration">
+                <canvas id="timer-animation-canvas" width="100" height="100"></canvas>
+                <p>Собирайте часы, чтобы полностью восстановить время.</p>
+            </div>
+            <button id="close-rules-btn" class="btn">Понятно</button>
         </div>
     </div>
 
     <!-- In-Game UI -->
     <div id="game-ui" style="display: none;">
+        <button id="sound-btn">
+            <svg class="sound-on-icon" viewBox="0 0 100 100" fill="white">
+                <path d="M10 35 L10 65 L30 65 L55 85 L55 15 L30 35 Z"></path>
+                <path d="M65 40 A15 15, 0, 0, 1, 65 60"></path>
+                <path d="M75 30 A25 25, 0, 0, 1, 75 70"></path>
+            </svg>
+            <svg class="sound-off-icon" viewBox="0 0 100 100" fill="white">
+                <path d="M10 35 L10 65 L30 65 L55 85 L55 15 L30 35 Z"></path>
+                <line x1="65" y1="35" x2="85" y2="55" stroke="white" stroke-width="5"></line>
+                <line x1="65" y1="55" x2="85" y2="35" stroke="white" stroke-width="5"></line>
+            </svg>
+        </button>
         <div id="counter">0</div>
         <button id="pause-btn">
             <svg viewBox="0 0 100 100" fill="white">
@@ -165,6 +256,9 @@
                 <rect x="60" y="20" width="20" height="60" rx="5"></rect>
             </svg>
         </button>
+        <div id="timer-container">
+            <div id="timer-bar"></div>
+        </div>
     </div>
 
     <!-- Pause Menu -->
@@ -192,15 +286,21 @@
         </div>
     </div>
 
+    <audio id="bg-music" src="background_music.mp3" loop></audio>
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/99/three.min.js"></script>
     <script>
+    document.addEventListener('DOMContentLoaded', () => {
       // --- DOM Elements ---
       const mainMenu = document.getElementById('main-menu');
+      const rulesMenu = document.getElementById('rules-menu');
       const gameUi = document.getElementById('game-ui');
       const pauseMenu = document.getElementById('pause-menu');
       const endMenu = document.getElementById('end-menu');
       const highScoreEl = document.getElementById('high-score');
       const playBtn = document.getElementById('play-btn');
+      const rulesBtn = document.getElementById('rules-btn');
+      const closeRulesBtn = document.getElementById('close-rules-btn');
       const pauseBtn = document.getElementById('pause-btn');
       const resumeBtn = document.getElementById('resume-btn');
       const restartBtnPause = document.getElementById('restart-btn-pause');
@@ -210,12 +310,115 @@
       const restartBtnEnd = document.getElementById('restart-btn-end');
       const menuBtnEnd = document.getElementById('menu-btn-end');
       const counterDOM = document.getElementById("counter");
+      const timerBar = document.getElementById('timer-bar');
+      const soundBtn = document.getElementById('sound-btn');
+      const backgroundMusic = document.getElementById('bg-music');
+
+      // --- VK Bridge Integration ---
+      let isVK = false;
+      const HIGHSCORE_VK_KEY = 'crossyHighScoreVK';
+      let gameOverCount = 0;
+
+      async function initVK() {
+        try {
+          await vkBridge.send('VKWebAppInit');
+          isVK = true;
+          console.log('VK Bridge initialized');
+          showBannerAd();
+          await loadHighScore();
+        } catch (error) {
+          console.error('VK Bridge init failed:', error);
+          isVK = false;
+          await loadHighScore(); // Load from localStorage if VK fails
+        }
+      }
+      
+      function showBannerAd() {
+          if (isVK) {
+              vkBridge.send("VKWebAppShowBannerAd", { banner_location: 'bottom' })
+                  .catch(e => console.error("Banner Ad Error:", e));
+          }
+      }
+
+      function showInterstitialAd() {
+          if (isVK) {
+              vkBridge.send('VKWebAppShowNativeAds', { ad_format: 'interstitial' })
+                  .catch(e => console.error("Interstitial Ad Error:", e));
+          }
+      }
+
+      async function saveHighScore() {
+          const dataString = highScore.toString();
+          localStorage.setItem(HIGHSCORE_VK_KEY, dataString); // Fallback
+          if (isVK) {
+              try {
+                  await vkBridge.send('VKWebAppStorageSet', { key: HIGHSCORE_VK_KEY, value: dataString });
+              } catch (e) { console.error('VK Storage save failed:', e); }
+          }
+      }
+
+      async function loadHighScore() {
+          let loadedData = null;
+          if (isVK) {
+              try {
+                  const data = await vkBridge.send('VKWebAppStorageGet', { keys: [HIGHSCORE_VK_KEY] });
+                  if (data.keys[0].value) {
+                      loadedData = data.keys[0].value;
+                  }
+              } catch (e) { console.error('VK Storage load failed:', e); }
+          }
+          if (!loadedData) {
+              loadedData = localStorage.getItem(HIGHSCORE_VK_KEY);
+          }
+          highScore = loadedData ? parseInt(loadedData, 10) : 0;
+          highScoreEl.textContent = highScore;
+      }
+
+      // --- Sound Engine ---
+      let isMuted = false;
+      let audioInitialized = false;
+
+      const jumpSynth = new Tone.Synth({
+          oscillator: { type: "sine" }, // Softer wave type
+          envelope: { attack: 0.005, decay: 0.1, sustain: 0, release: 0.1 },
+      }).toDestination();
+      jumpSynth.volume.value = -10; // Lower volume
+
+      const collectSynth = new Tone.Synth({
+          oscillator: { type: "sine" },
+          envelope: { attack: 0.01, decay: 0.2, sustain: 0.2, release: 0.2 },
+      }).toDestination();
+
+      const gameOverSynth = new Tone.Synth({
+          oscillator: { type: "sawtooth" },
+          envelope: { attack: 0.01, decay: 0.5, sustain: 0.1, release: 0.5 },
+      }).toDestination();
+
+      function playSound(sound) {
+          if (isMuted || !audioInitialized) return;
+          const now = Tone.now();
+          switch(sound) {
+              case 'jump':
+                  jumpSynth.triggerAttackRelease("G4", "16n", now);
+                  break;
+              case 'collect':
+                  collectSynth.triggerAttackRelease("E6", "8n", now);
+                  break;
+              case 'gameOver':
+                  gameOverSynth.triggerAttackRelease("C3", "4n", now);
+                  break;
+          }
+      }
 
       // --- Game State ---
-      let gameState = 'menu'; // 'menu', 'playing', 'paused', 'gameover'
+      let gameState = 'menu';
       let isGameRunning = false;
-      let highScore = localStorage.getItem('crossyHighScore') || 0;
-      highScoreEl.textContent = highScore;
+      let highScore = 0;
+
+      // --- Timer Variables ---
+      let maxTime = 12000;
+      let currentTime = maxTime;
+      const forwardMoveTimeBonus = 300;
 
       // --- Scene Setup ---
       const scene = new THREE.Scene();
@@ -283,27 +486,40 @@
       renderer.setSize(window.innerWidth, window.innerHeight);
       document.body.appendChild(renderer.domElement);
 
-      const laneTypes = ["car", "truck", "forest"];
+      const laneTypes = ["car", "truck", "forest", "field"];
       const laneSpeeds = [2, 2.5, 3];
       const vechicleColors = [0xa52523, 0xbdb638, 0x78b14b];
       const threeHeights = [20, 45, 60];
 
       // --- Game Logic Functions ---
-      function startGame() {
+      async function startGame() {
+        if (!audioInitialized) {
+            await Tone.start();
+            audioInitialized = true;
+            console.log("Audio Context started");
+        }
         mainMenu.classList.remove('active');
         gameUi.style.display = 'block';
         gameState = 'playing';
         isGameRunning = true;
         initaliseValues();
+        previousTimestamp = null; 
+        if (!isMuted) {
+            backgroundMusic.play().catch(e => console.error("Music play failed:", e));
+        }
+        showBannerAd();
         animate();
       }
 
       function resetGame() {
           if (lanes) {
-            lanes.forEach((lane) => scene.remove(lane.mesh));
+            lanes.forEach((lane) => {
+                if(lane.timeBonus) {
+                    lane.mesh.remove(lane.timeBonus);
+                }
+                scene.remove(lane.mesh)
+            });
           }
-          // Also remove all lanes from the scene that might have been added outside the 'lanes' array
-          // This is a safeguard
           const objectsToRemove = [];
           scene.children.forEach(child => {
               if (child.userData.isLane) {
@@ -311,7 +527,6 @@
               }
           });
           objectsToRemove.forEach(obj => scene.remove(obj));
-
           lanes = [];
       }
 
@@ -325,18 +540,16 @@
             const prevLane = allLanes.length > 0 ? allLanes[allLanes.length - 1] : null;
             const lane = new Lane(index, prevLane);
             lane.mesh.position.y = index * positionWidth * zoom;
-            lane.mesh.userData.isLane = true; // Mark object as a lane for easy removal
+            lane.mesh.userData.isLane = true;
             scene.add(lane.mesh);
             allLanes.push(lane);
         }
         lanes = allLanes.filter((lane) => lane.index >= 0);
 
-
         currentLane = 0;
         currentColumn = Math.floor(columns / 2);
         counterDOM.innerHTML = currentLane;
-
-        previousTimestamp = null;
+        
         startMoving = false;
         moves = [];
         stepStartTimestamp = null;
@@ -344,7 +557,7 @@
         chicken.position.x = 0;
         chicken.position.y = 0;
         chicken.position.z = 0;
-        chicken.rotation.z = Math.PI; // Start facing away from camera
+        chicken.rotation.z = Math.PI;
         chickenTargetRotation = Math.PI;
 
         camera.position.y = initialCameraPositionY;
@@ -352,15 +565,29 @@
 
         dirLight.position.x = initialDirLightPositionX;
         dirLight.position.y = initialDirLightPositionY;
+
+        currentTime = maxTime;
+        timerBar.style.width = '100%';
+        timerBar.style.backgroundColor = '#2ecc71';
       };
 
       function gameOver() {
+          playSound('gameOver');
+          backgroundMusic.pause();
           gameState = 'gameover';
           isGameRunning = false;
+          
           if (currentLane > highScore) {
               highScore = currentLane;
-              localStorage.setItem('crossyHighScore', highScore);
+              saveHighScore();
           }
+          
+          gameOverCount++;
+          if (currentLane > 150 || gameOverCount >= 3) {
+              showInterstitialAd();
+              gameOverCount = 0; // Reset counter after showing ad
+          }
+
           endScoreEl.textContent = currentLane;
           endHighScoreEl.textContent = highScore;
           highScoreEl.textContent = highScore;
@@ -370,6 +597,7 @@
 
       function pauseGame() {
         if (gameState !== 'playing') return;
+        backgroundMusic.pause();
         gameState = 'paused';
         isGameRunning = false;
         pauseMenu.classList.add('active');
@@ -378,23 +606,38 @@
       function resumeGame() {
         gameState = 'playing';
         isGameRunning = true;
+        if (!isMuted) {
+            backgroundMusic.play().catch(e => console.error("Music play failed:", e));
+        }
         pauseMenu.classList.remove('active');
-        previousTimestamp = null; // Reset timestamp to avoid jump
+        previousTimestamp = null; 
         requestAnimationFrame(animate);
       }
 
       function goToMenu() {
+          backgroundMusic.pause();
+          backgroundMusic.currentTime = 0;
           resetGame();
           endMenu.classList.remove('active');
           pauseMenu.classList.remove('active');
           gameUi.style.display = 'none';
           mainMenu.classList.add('active');
+          showBannerAd();
           gameState = 'menu';
       }
 
 
       // --- Event Listeners ---
       playBtn.addEventListener('click', startGame);
+      rulesBtn.addEventListener('click', () => {
+          mainMenu.classList.remove('active');
+          rulesMenu.classList.add('active');
+          renderStaticRulesIllustration();
+      });
+      closeRulesBtn.addEventListener('click', () => {
+          rulesMenu.classList.remove('active');
+          mainMenu.classList.add('active');
+      });
       pauseBtn.addEventListener('click', pauseGame);
       resumeBtn.addEventListener('click', resumeGame);
       restartBtnPause.addEventListener('click', () => {
@@ -408,11 +651,18 @@
       });
       menuBtnEnd.addEventListener('click', goToMenu);
 
-      // --- Swipe and Tap Controls ---
-      let touchStartX = 0;
-      let touchStartY = 0;
-      let touchEndX = 0;
-      let touchEndY = 0;
+      soundBtn.addEventListener('click', () => {
+          isMuted = !isMuted;
+          soundBtn.classList.toggle('muted', isMuted);
+          backgroundMusic.muted = isMuted;
+          if (!isMuted && gameState === 'playing') {
+              backgroundMusic.play().catch(e => console.error("Music play failed:", e));
+          } else {
+              backgroundMusic.pause();
+          }
+      });
+
+      let touchStartX = 0, touchStartY = 0, touchEndX = 0, touchEndY = 0;
 
       document.addEventListener('touchstart', e => {
           if (gameState !== 'playing') return;
@@ -434,10 +684,8 @@
           const absDeltaY = Math.abs(deltaY);
 
           if (Math.max(absDeltaX, absDeltaY) < 30) {
-              // It's a tap
               move("forward");
           } else {
-              // It's a swipe
               if (absDeltaX > absDeltaY) {
                   if (deltaX > 0) move('right');
                   else move('left');
@@ -448,7 +696,6 @@
           }
       }
 
-      // Keyboard controls
       window.addEventListener("keydown", (event) => {
         if (gameState !== 'playing') return;
         if (event.key === "ArrowUp") move("forward");
@@ -457,11 +704,8 @@
         else if (event.key === "ArrowRight") move("right");
       });
 
-      // Prevent context menu and text selection
       window.addEventListener('contextmenu', e => e.preventDefault());
 
-
-      // --- Core Game Objects and Functions ---
       const addLane = () => {
         const index = lanes.length;
         const prevLane = lanes.length > 0 ? lanes[lanes.length - 1] : null;
@@ -542,8 +786,8 @@
               flatShading: true,
               map: carLeftSideTexture,
             }),
-            new THREE.MeshPhongMaterial({ color: 0xcccccc, flatShading: true }), // top
-            new THREE.MeshPhongMaterial({ color: 0xcccccc, flatShading: true }), // bottom
+            new THREE.MeshPhongMaterial({ color: 0xcccccc, flatShading: true }),
+            new THREE.MeshPhongMaterial({ color: 0xcccccc, flatShading: true }),
           ]
         );
         cabin.position.x = 6 * zoom;
@@ -599,7 +843,7 @@
         const cabin = new THREE.Mesh(
           new THREE.BoxBufferGeometry(25 * zoom, 30 * zoom, 30 * zoom),
           [
-            new THREE.MeshPhongMaterial({ color, flatShading: true }), // back
+            new THREE.MeshPhongMaterial({ color, flatShading: true }),
             new THREE.MeshPhongMaterial({
               color,
               flatShading: true,
@@ -615,8 +859,8 @@
               flatShading: true,
               map: truckLeftSideTexture,
             }),
-            new THREE.MeshPhongMaterial({ color, flatShading: true }), // top
-            new THREE.MeshPhongMaterial({ color, flatShading: true }), // bottom
+            new THREE.MeshPhongMaterial({ color, flatShading: true }),
+            new THREE.MeshPhongMaterial({ color, flatShading: true }),
           ]
         );
         cabin.position.x = -40 * zoom;
@@ -723,6 +967,38 @@
         return chicken;
       }
 
+      function TimeBonus() {
+          const bonus = new THREE.Group();
+
+          const clockFace = new THREE.Mesh(
+              new THREE.CylinderBufferGeometry(10 * zoom, 10 * zoom, 4 * zoom, 12),
+              new THREE.MeshPhongMaterial({ color: 0xf0c420, flatShading: true })
+          );
+          clockFace.rotation.x = Math.PI / 2;
+          bonus.add(clockFace);
+
+          const handMaterial = new THREE.MeshPhongMaterial({ color: 0x333333, flatShading: true });
+          const longHand = new THREE.Mesh(
+              new THREE.BoxBufferGeometry(1 * zoom, 8 * zoom, 1 * zoom),
+              handMaterial
+          );
+          longHand.position.z = 3 * zoom;
+          longHand.position.y = 3 * zoom;
+          bonus.add(longHand);
+
+          const shortHand = new THREE.Mesh(
+              new THREE.BoxBufferGeometry(1 * zoom, 5 * zoom, 1 * zoom),
+              handMaterial
+          );
+          shortHand.position.z = 3 * zoom;
+          shortHand.position.x = 2 * zoom;
+          shortHand.rotation.z = Math.PI / 3;
+          bonus.add(shortHand);
+
+          bonus.position.z = 10 * zoom;
+          return bonus;
+      }
+
       function Road() {
         const road = new THREE.Group();
         const createSection = (color) =>
@@ -765,9 +1041,26 @@
       function Lane(index, prevLane) {
         this.index = index;
         this.type = index <= 0 ? "field" : laneTypes[Math.floor(Math.random() * laneTypes.length)];
+        
+        if (index > 5 && this.type === 'field' && Math.random() < 0.2) {
+            this.type = 'field_bonus';
+        }
+
         switch (this.type) {
           case "field":
             this.mesh = new Grass();
+            break;
+          case "field_bonus":
+            this.mesh = new Grass();
+            this.occupiedPositions = new Set();
+            this.timeBonus = new TimeBonus();
+            let bonusPosition;
+            do {
+                bonusPosition = Math.floor(Math.random() * columns);
+            } while (bonusPosition === Math.floor(columns / 2));
+            this.occupiedPositions.add(bonusPosition);
+            this.timeBonus.position.x = (bonusPosition * positionWidth + positionWidth / 2) * zoom - (boardWidth * zoom) / 2;
+            this.mesh.add(this.timeBonus);
             break;
           case "forest":
             this.mesh = new Grass();
@@ -822,28 +1115,27 @@
             break;
         }
 
-        // --- NEW: Add road markings if this and the previous lane are roads ---
         const isCurrentRoad = this.type === 'car' || this.type === 'truck';
         const isPrevRoad = prevLane && (prevLane.type === 'car' || prevLane.type === 'truck');
 
         if (isCurrentRoad && isPrevRoad) {
             const markingMaterial = new THREE.MeshPhongMaterial({ color: 0xFFFFFF });
             const markingGeometry = new THREE.BoxBufferGeometry(30 * zoom, 3 * zoom, 1 * zoom);
-            const markingCount = Math.floor(boardWidth / (30 * 2)); // Number of dashes to fit
+            const markingCount = Math.floor(boardWidth / (30 * 2));
             for(let i = 0; i < markingCount; i++) {
                 const marking = new THREE.Mesh(markingGeometry, markingMaterial);
-                // Position dashes along the X axis
                 marking.position.x = -boardWidth * zoom / 2 + 60 * zoom * i + 30 * zoom;
-                // Position on the edge between this and previous lane
                 marking.position.y = -positionWidth * zoom / 2;
-                marking.position.z = 2 * zoom; // Lift it slightly above the road
+                marking.position.z = 2 * zoom;
                 this.mesh.add(marking);
             }
         }
       }
 
       function move(direction) {
-        if (!isGameRunning) return;
+        if (!isGameRunning || moves.length > 0) return;
+        
+        playSound('jump');
 
         const finalPositions = moves.reduce(
           (position, move) => {
@@ -856,25 +1148,23 @@
           { lane: currentLane, column: currentColumn }
         );
 
-        // --- FIX: Corrected chicken rotation ---
-        // The chicken model faces towards negative Y, so we adjust rotations accordingly.
         if (direction === "forward") {
-          chickenTargetRotation = Math.PI; // Face away from camera (positive Y)
+          chickenTargetRotation = Math.PI;
           if (lanes[finalPositions.lane + 1].type === "forest" && lanes[finalPositions.lane + 1].occupiedPositions.has(finalPositions.column)) return;
           if (!stepStartTimestamp) startMoving = true;
           addLane();
         } else if (direction === "backward") {
-          chickenTargetRotation = 0; // Face towards camera (negative Y)
+          chickenTargetRotation = 0;
           if (finalPositions.lane === 0) return;
           if (lanes[finalPositions.lane - 1].type === "forest" && lanes[finalPositions.lane - 1].occupiedPositions.has(finalPositions.column)) return;
           if (!stepStartTimestamp) startMoving = true;
         } else if (direction === "left") {
-          chickenTargetRotation = -Math.PI / 2; // Face left (negative X)
+          chickenTargetRotation = -Math.PI / 2;
           if (finalPositions.column === 0) return;
           if (lanes[finalPositions.lane].type === "forest" && lanes[finalPositions.lane].occupiedPositions.has(finalPositions.column - 1)) return;
           if (!stepStartTimestamp) startMoving = true;
         } else if (direction === "right") {
-          chickenTargetRotation = Math.PI / 2; // Face right (positive X)
+          chickenTargetRotation = Math.PI / 2;
           if (finalPositions.column === columns - 1) return;
           if (lanes[finalPositions.lane].type === "forest" && lanes[finalPositions.lane].occupiedPositions.has(finalPositions.column + 1)) return;
           if (!stepStartTimestamp) startMoving = true;
@@ -886,11 +1176,33 @@
         if (!isGameRunning) return;
         requestAnimationFrame(animate);
 
-        if (!previousTimestamp) previousTimestamp = timestamp;
+        if (!previousTimestamp) {
+            previousTimestamp = timestamp;
+            return;
+        }
         const delta = timestamp - previousTimestamp;
         previousTimestamp = timestamp;
 
-        // Animate chicken rotation
+        if (gameState === 'playing') {
+            currentTime -= delta;
+        }
+
+        const timePercentage = Math.max(0, (currentTime / maxTime) * 100);
+        timerBar.style.width = `${timePercentage}%`;
+
+        if (timePercentage < 30) {
+            timerBar.style.backgroundColor = '#e74c3c';
+        } else if (timePercentage < 60) {
+            timerBar.style.backgroundColor = '#f1c40f';
+        } else {
+            timerBar.style.backgroundColor = '#2ecc71';
+        }
+
+        if (currentTime <= 0) {
+            gameOver();
+            return;
+        }
+
         const rotationDelta = chickenTargetRotation - chicken.rotation.z;
         if (Math.abs(rotationDelta) > 0.01) {
             let normDelta = rotationDelta % (2 * Math.PI);
@@ -911,6 +1223,9 @@
                 item.position.x = item.position.x > aBitAfterTheEndOFLane ? aBitBeforeTheBeginingOfLane : (item.position.x += (lane.speed / 16) * delta);
               }
             });
+          }
+          if (lane.timeBonus) {
+              lane.timeBonus.rotation.z += delta * 0.002;
           }
         });
 
@@ -947,6 +1262,7 @@
               case "forward":
                 currentLane++;
                 counterDOM.innerHTML = currentLane;
+                currentTime = Math.min(maxTime, currentTime + forwardMoveTimeBonus);
                 break;
               case "backward":
                 currentLane--;
@@ -962,16 +1278,23 @@
             moves.shift();
             chicken.position.x = (currentColumn * positionWidth + positionWidth / 2) * zoom - (boardWidth * zoom) / 2;
             stepStartTimestamp = moves.length === 0 ? null : timestamp;
+
+            const lane = lanes[currentLane];
+            if (lane && lane.type === 'field_bonus' && lane.occupiedPositions.has(currentColumn)) {
+                playSound('collect');
+                lane.mesh.remove(lane.timeBonus);
+                lane.timeBonus = null;
+                lane.occupiedPositions.delete(currentColumn);
+                currentTime = maxTime;
+            }
           }
         }
 
-        // Move camera
         camera.position.y = initialCameraPositionY + chicken.position.y;
         camera.position.x = initialCameraPositionX + chicken.position.x;
         dirLight.position.y = initialDirLightPositionY + chicken.position.y;
         dirLight.position.x = initialDirLightPositionX + chicken.position.x;
 
-        // Hit test
         const currentActiveLane = lanes[currentLane];
         if (currentActiveLane) {
             if (currentActiveLane.type === "car" || currentActiveLane.type === "truck") {
@@ -989,8 +1312,32 @@
             }
         }
 
-
         renderer.render(scene, camera);
+      }
+
+      function renderStaticRulesIllustration() {
+          const canvas = document.getElementById('timer-animation-canvas');
+          if (canvas.dataset.rendered) return;
+
+          const scene = new THREE.Scene();
+          const camera = new THREE.PerspectiveCamera(75, canvas.width / canvas.height, 0.1, 1000);
+          const renderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true });
+          renderer.setSize(canvas.width, canvas.height);
+          renderer.setClearColor(0xbaf455, 1);
+
+          const bonus = new TimeBonus();
+          bonus.rotation.y = 0.5;
+          bonus.rotation.x = 0.2;
+          scene.add(bonus);
+          camera.position.z = 55; 
+          
+          const light = new THREE.PointLight(0xffffff, 1, 100);
+          light.position.set(10, 10, 30);
+          scene.add(light);
+          scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+
+          renderer.render(scene, camera);
+          canvas.dataset.rendered = 'true';
       }
 
       window.addEventListener('resize', () => {
@@ -1001,6 +1348,10 @@
           camera.updateProjectionMatrix();
           renderer.setSize(window.innerWidth, window.innerHeight);
       });
+      
+      // Initialize VK Bridge when the script loads
+      initVK();
+    });
     </script>
   </body>
 </html>
