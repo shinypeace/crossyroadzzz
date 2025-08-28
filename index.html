@@ -379,10 +379,10 @@
       let audioInitialized = false;
 
       const jumpSynth = new Tone.Synth({
-          oscillator: { type: "sine" }, // Softer wave type
+          oscillator: { type: "sine" },
           envelope: { attack: 0.005, decay: 0.1, sustain: 0, release: 0.1 },
       }).toDestination();
-      jumpSynth.volume.value = -10; // Lower volume
+      jumpSynth.volume.value = -10;
 
       const collectSynth = new Tone.Synth({
           oscillator: { type: "sine" },
@@ -442,7 +442,7 @@
       const positionWidth = 42;
       const columns = 17;
       const boardWidth = positionWidth * columns;
-      const stepTime = 200;
+      const stepTime = 180; // BUGFIX: Reduced for snappier movement
 
       let lanes;
       let currentLane;
@@ -577,6 +577,11 @@
           gameState = 'gameover';
           isGameRunning = false;
           
+          // BUGFIX: Defensive reset of movement state to prevent freezing
+          moves = [];
+          stepStartTimestamp = null;
+          startMoving = false;
+          
           if (currentLane > highScore) {
               highScore = currentLane;
               saveHighScore();
@@ -585,7 +590,7 @@
           gameOverCount++;
           if (currentLane > 150 || gameOverCount >= 3) {
               showInterstitialAd();
-              gameOverCount = 0; // Reset counter after showing ad
+              gameOverCount = 0;
           }
 
           endScoreEl.textContent = currentLane;
@@ -1133,7 +1138,8 @@
       }
 
       function move(direction) {
-        if (!isGameRunning || moves.length > 0) return;
+        // BUGFIX: Removed move queue limit for better responsiveness
+        if (!isGameRunning) return;
         
         playSound('jump');
 
@@ -1349,7 +1355,6 @@
           renderer.setSize(window.innerWidth, window.innerHeight);
       });
       
-      // Initialize VK Bridge when the script loads
       initVK();
     });
     </script>
