@@ -442,7 +442,7 @@
       const positionWidth = 42;
       const columns = 17;
       const boardWidth = positionWidth * columns;
-      const stepTime = 180; // BUGFIX: Reduced for snappier movement
+      const stepTime = 180; 
 
       let lanes;
       let currentLane;
@@ -532,6 +532,7 @@
 
       function initaliseValues() {
         resetGame();
+        resetTouchState(); // BUGFIX: Reset touch coordinates on every game start
         
         const allLanes = [];
         const laneIndexes = [-9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
@@ -577,7 +578,6 @@
           gameState = 'gameover';
           isGameRunning = false;
           
-          // BUGFIX: Defensive reset of movement state to prevent freezing
           moves = [];
           stepStartTimestamp = null;
           startMoving = false;
@@ -616,6 +616,7 @@
         }
         pauseMenu.classList.remove('active');
         previousTimestamp = null; 
+        resetTouchState(); // BUGFIX: Reset touch state on resume
         requestAnimationFrame(animate);
       }
 
@@ -668,6 +669,14 @@
       });
 
       let touchStartX = 0, touchStartY = 0, touchEndX = 0, touchEndY = 0;
+      
+      // BUGFIX: New function to reset touch state
+      function resetTouchState() {
+          touchStartX = 0;
+          touchStartY = 0;
+          touchEndX = 0;
+          touchEndY = 0;
+      }
 
       document.addEventListener('touchstart', e => {
           if (gameState !== 'playing') return;
@@ -683,6 +692,9 @@
       });
 
       function handleSwipe() {
+          // BUGFIX: Check if touchstart was registered before handling swipe
+          if (touchStartX === 0 && touchStartY === 0) return;
+
           const deltaX = touchEndX - touchStartX;
           const deltaY = touchEndY - touchStartY;
           const absDeltaX = Math.abs(deltaX);
@@ -699,6 +711,8 @@
                   else move('backward');
               }
           }
+          // Reset after handling to prevent phantom swipes
+          resetTouchState();
       }
 
       window.addEventListener("keydown", (event) => {
@@ -1138,9 +1152,11 @@
       }
 
       function move(direction) {
-        // BUGFIX: Removed move queue limit for better responsiveness
         if (!isGameRunning) return;
         
+        // BUGFIX: Allow move queuing for better responsiveness
+        if (moves.length > 2) return;
+
         playSound('jump');
 
         const finalPositions = moves.reduce(
