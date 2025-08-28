@@ -329,7 +329,7 @@
         } catch (error) {
           console.error('VK Bridge init failed:', error);
           isVK = false;
-          await loadHighScore(); // Load from localStorage if VK fails
+          await loadHighScore();
         }
       }
       
@@ -349,7 +349,7 @@
 
       async function saveHighScore() {
           const dataString = highScore.toString();
-          localStorage.setItem(HIGHSCORE_VK_KEY, dataString); // Fallback
+          localStorage.setItem(HIGHSCORE_VK_KEY, dataString);
           if (isVK) {
               try {
                   await vkBridge.send('VKWebAppStorageSet', { key: HIGHSCORE_VK_KEY, value: dataString });
@@ -532,7 +532,7 @@
 
       function initaliseValues() {
         resetGame();
-        resetTouchState(); // BUGFIX: Reset touch coordinates on every game start
+        resetTouchState();
         
         const allLanes = [];
         const laneIndexes = [-9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
@@ -616,7 +616,7 @@
         }
         pauseMenu.classList.remove('active');
         previousTimestamp = null; 
-        resetTouchState(); // BUGFIX: Reset touch state on resume
+        resetTouchState();
         requestAnimationFrame(animate);
       }
 
@@ -670,7 +670,6 @@
 
       let touchStartX = 0, touchStartY = 0, touchEndX = 0, touchEndY = 0;
       
-      // BUGFIX: New function to reset touch state
       function resetTouchState() {
           touchStartX = 0;
           touchStartY = 0;
@@ -678,21 +677,24 @@
           touchEndY = 0;
       }
 
-      document.addEventListener('touchstart', e => {
+      // BUGFIX: Attaching listeners to the canvas (renderer.domElement)
+      renderer.domElement.addEventListener('touchstart', e => {
           if (gameState !== 'playing') return;
+          // Prevent the page from scrolling
+          e.preventDefault();
           touchStartX = e.changedTouches[0].screenX;
           touchStartY = e.changedTouches[0].screenY;
       }, { passive: false });
 
-      document.addEventListener('touchend', e => {
+      renderer.domElement.addEventListener('touchend', e => {
           if (gameState !== 'playing') return;
+          e.preventDefault();
           touchEndX = e.changedTouches[0].screenX;
           touchEndY = e.changedTouches[0].screenY;
           handleSwipe();
       });
 
       function handleSwipe() {
-          // BUGFIX: Check if touchstart was registered before handling swipe
           if (touchStartX === 0 && touchStartY === 0) return;
 
           const deltaX = touchEndX - touchStartX;
@@ -711,7 +713,6 @@
                   else move('backward');
               }
           }
-          // Reset after handling to prevent phantom swipes
           resetTouchState();
       }
 
@@ -1154,7 +1155,6 @@
       function move(direction) {
         if (!isGameRunning) return;
         
-        // BUGFIX: Allow move queuing for better responsiveness
         if (moves.length > 2) return;
 
         playSound('jump');
