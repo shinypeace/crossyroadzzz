@@ -343,7 +343,16 @@
       function showInterstitialAd() {
           if (isVK) {
               vkBridge.send('VKWebAppShowNativeAds', { ad_format: 'interstitial' })
-                  .catch(e => console.error("Interstitial Ad Error:", e));
+                  .catch(e => console.error("Interstitial Ad Error:", e))
+                  .finally(() => {
+                      // FIX: Этот блок выполняется после закрытия рекламы.
+                      // Сбрасываем состояние касания, чтобы предотвратить "залипшие" свайпы.
+                      resetTouchState();
+                      // Сбрасываем временную метку анимации, чтобы избежать резкого скачка после паузы.
+                      previousTimestamp = null;
+                      // Принудительно возвращаем фокус на окно игры, чтобы восстановить работу управления.
+                      window.focus(); 
+                  });
           }
       }
 
