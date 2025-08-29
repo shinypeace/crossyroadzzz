@@ -112,6 +112,14 @@
        .btn-secondary:active {
         box-shadow: 0 2px 0 #f39c12;
       }
+      .btn-tertiary {
+        background-color: #3498db;
+        color: white;
+        box-shadow: 0 5px 0 #2980b9;
+      }
+      .btn-tertiary:active {
+        box-shadow: 0 2px 0 #2980b9;
+      }
 
       #main-menu h1 {
         font-size: 2.5rem;
@@ -207,6 +215,33 @@
       #sound-btn.muted .sound-on-icon {
         display: none;
       }
+      .games-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1.5rem;
+        margin: 2rem 0;
+        padding: 0 1rem;
+      }
+      .game-item {
+        cursor: pointer;
+        text-align: center;
+      }
+      .game-item img {
+        width: 80px;
+        height: 80px;
+        border-radius: 20px;
+        border: 3px solid #000;
+        margin-bottom: 0.5rem;
+        transition: transform 0.2s ease-in-out;
+        background-color: #ddd;
+      }
+      .game-item:hover img {
+          transform: scale(1.05);
+      }
+      .game-item span {
+        font-size: 0.7rem;
+        color: #000;
+      }
     </style>
   </head>
   <body>
@@ -218,6 +253,7 @@
             <div class="modal-buttons">
                 <button id="play-btn" class="btn btn-primary">Играть</button>
                 <button id="rules-btn" class="btn btn-secondary">Правила</button>
+                <button id="other-games-btn" class="btn btn-tertiary">Другие игры</button>
             </div>
         </div>
     </div>
@@ -232,6 +268,17 @@
                 <p>Собирайте часы, чтобы полностью восстановить время.</p>
             </div>
             <button id="close-rules-btn" class="btn">Понятно</button>
+        </div>
+    </div>
+
+    <!-- Other Games Menu -->
+    <div id="other-games-menu" class="modal">
+        <div class="modal-content">
+            <h2>Другие игры</h2>
+            <div id="other-games-container" class="games-grid">
+                <!-- Games will be injected here by JS -->
+            </div>
+            <button id="close-other-games-btn" class="btn">Назад</button>
         </div>
     </div>
 
@@ -294,13 +341,16 @@
       // --- DOM Elements ---
       const mainMenu = document.getElementById('main-menu');
       const rulesMenu = document.getElementById('rules-menu');
+      const otherGamesMenu = document.getElementById('other-games-menu');
       const gameUi = document.getElementById('game-ui');
       const pauseMenu = document.getElementById('pause-menu');
       const endMenu = document.getElementById('end-menu');
       const highScoreEl = document.getElementById('high-score');
       const playBtn = document.getElementById('play-btn');
       const rulesBtn = document.getElementById('rules-btn');
+      const otherGamesBtn = document.getElementById('other-games-btn');
       const closeRulesBtn = document.getElementById('close-rules-btn');
+      const closeOtherGamesBtn = document.getElementById('close-other-games-btn');
       const pauseBtn = document.getElementById('pause-btn');
       const resumeBtn = document.getElementById('resume-btn');
       const restartBtnPause = document.getElementById('restart-btn-pause');
@@ -313,6 +363,7 @@
       const timerBar = document.getElementById('timer-bar');
       const soundBtn = document.getElementById('sound-btn');
       const backgroundMusic = document.getElementById('bg-music');
+      const otherGamesContainer = document.getElementById('other-games-container');
 
       // --- VK Bridge Integration ---
       let isVK = false;
@@ -340,20 +391,9 @@
           }
       }
 
+      // REMOVED Interstitial Ad logic
       function showInterstitialAd() {
-          if (isVK) {
-              vkBridge.send('VKWebAppShowNativeAds', { ad_format: 'interstitial' })
-                  .catch(e => console.error("Interstitial Ad Error:", e))
-                  .finally(() => {
-                      // FIX: Этот блок выполняется после закрытия рекламы.
-                      // Сбрасываем состояние касания, чтобы предотвратить "залипшие" свайпы.
-                      resetTouchState();
-                      // Сбрасываем временную метку анимации, чтобы избежать резкого скачка после паузы.
-                      previousTimestamp = null;
-                      // Принудительно возвращаем фокус на окно игры, чтобы восстановить работу управления.
-                      window.focus(); 
-                  });
-          }
+          console.log("Interstitial Ad logic has been removed.");
       }
 
       async function saveHighScore() {
@@ -596,11 +636,8 @@
               saveHighScore();
           }
           
+          // REMOVED Interstitial Ad Call
           gameOverCount++;
-          if (currentLane > 150 || gameOverCount >= 3) {
-              showInterstitialAd();
-              gameOverCount = 0;
-          }
 
           endScoreEl.textContent = currentLane;
           endHighScoreEl.textContent = highScore;
@@ -653,6 +690,14 @@
           rulesMenu.classList.remove('active');
           mainMenu.classList.add('active');
       });
+      otherGamesBtn.addEventListener('click', () => {
+          mainMenu.classList.remove('active');
+          otherGamesMenu.classList.add('active');
+      });
+      closeOtherGamesBtn.addEventListener('click', () => {
+          otherGamesMenu.classList.remove('active');
+          mainMenu.classList.add('active');
+      });
       pauseBtn.addEventListener('click', pauseGame);
       resumeBtn.addEventListener('click', resumeGame);
       restartBtnPause.addEventListener('click', () => {
@@ -676,6 +721,14 @@
               backgroundMusic.pause();
           }
       });
+      
+      otherGamesContainer.addEventListener('click', e => {
+        const gameItem = e.target.closest('.game-item');
+        if (gameItem && isVK) {
+            const appId = parseInt(gameItem.dataset.appId, 10);
+            vkBridge.send('VKWebAppOpenApp', { app_id: appId });
+        }
+      });
 
       let touchStartX = 0, touchStartY = 0, touchEndX = 0, touchEndY = 0;
       
@@ -686,10 +739,8 @@
           touchEndY = 0;
       }
 
-      // BUGFIX: Attaching listeners to the canvas (renderer.domElement)
       renderer.domElement.addEventListener('touchstart', e => {
           if (gameState !== 'playing') return;
-          // Prevent the page from scrolling
           e.preventDefault();
           touchStartX = e.changedTouches[0].screenX;
           touchStartY = e.changedTouches[0].screenY;
@@ -743,6 +794,32 @@
         scene.add(lane.mesh);
         lanes.push(lane);
       };
+
+      function renderOtherGames() {
+        otherGamesContainer.innerHTML = '';
+        const games = [
+            { name: 'Bubble Shooter', appId: 54051411, icon: 'https://i.ibb.co/6rC0W2k/icon1.png' },
+            { name: 'Тетрис', appId: 54051413, icon: 'https://i.ibb.co/yQZz5fQ/icon2.png' },
+            { name: 'Tower Blocks', appId: 53962513, icon: 'https://i.ibb.co/PMQyG3J/icon3.png' },
+            { name: 'Блок Про', appId: 53936296, icon: 'https://i.ibb.co/GHYyv7z/icon4.png' },
+            { name: 'Филворды', appId: 53867134, icon: 'https://i.ibb.co/r20xL3Y/icon5.png' },
+            { name: 'Словли', appId: 53861990, icon: 'https://i.ibb.co/mHq334C/icon6.png' },
+            { name: 'Brick Balls', appId: 54023580, icon: 'https://i.ibb.co/k80yVv1/icon7.png' },
+            { name: '2048', appId: 53965380, icon: 'https://i.ibb.co/YhWf0p3/icon8.png' },
+            { name: 'Math Matrix', appId: 53970659, icon: 'https://i.ibb.co/D8J0tBv/icon9.png' }
+        ];
+
+        games.forEach(game => {
+            const gameEl = document.createElement('div');
+            gameEl.className = "game-item";
+            gameEl.dataset.appId = game.appId;
+            gameEl.innerHTML = `
+                <img src="${game.icon}" alt="${game.name}">
+                <span>${game.name}</span>
+            `;
+            otherGamesContainer.appendChild(gameEl);
+        });
+      }
 
       function Texture(width, height, rects) {
         const canvas = document.createElement("canvas");
@@ -1380,8 +1457,10 @@
           renderer.setSize(window.innerWidth, window.innerHeight);
       });
       
+      renderOtherGames();
       initVK();
     });
     </script>
   </body>
 </html>
+
